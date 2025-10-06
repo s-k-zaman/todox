@@ -99,24 +99,50 @@ func containsLine(output, target string) bool {
 
 func openInTmux(editor, file string) {
 	windowName := "TODOs"
+	preferredNumber := "9"
 
-	// Check if window exists
-	checkCmd := exec.Command("tmux", "list-windows", "-F", "#{window_name}")
+	// CHECK IF WINDOW EXISTS
+	checkCmd := exec.Command("tmux", "list-windows", "-F", "#{window_index}:#{window_name}")
 	output, err := checkCmd.Output()
 	if err != nil {
 		return
 	}
 	// Switch to
-	if containsLine(string(output), windowName) {
-		exec.Command("tmux", "select-window", "-t", windowName).Run()
-		return
+	lines := strings.SplitSeq(string(output), "\n")
+	for line := range lines {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) < 2 {
+			continue
+		}
+		num, name := parts[0], parts[1]
+
+		// If a window already exists with the same name or preferred number, just switch to it
+		if name == windowName {
+			exec.Command("tmux", "select-window", "-t", num).Run()
+			return
+		}
 	}
-	// Create new
+
+	// CREATE NEW
 	cmdStr := fmt.Sprintf("[[ -e %[1]q ]] && %[2]s %[1]q", file, editor)
-	cmd := exec.Command("tmux", "neww",
-		"-n", windowName,
-		"-c", "#{pane_current_path}",
-		cmdStr)
+	args := []string{"neww", "-n", windowName}
+
+	// Determine if preferred number is free, number taken → let tmux auto-assign
+	assign_num := "-t " + preferredNumber
+	if strings.Contains(string(output), preferredNumber+":") {
+		assign_num = ""
+	}
+	if assign_num != "" {
+		args = append(args, assign_num)
+	}
+
+	args = append(args, "-c", "#{pane_current_path}")
+
+	args = append(args, cmdStr)
+	cmd := exec.Command("tmux", args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
