@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"os"
@@ -14,6 +15,8 @@ import (
 )
 
 type Args struct {
+	w_dir        string
+	todo_path    string
 	add          string
 	yes          bool
 	todoFile     string
@@ -24,9 +27,9 @@ type Args struct {
 
 func parseFlags() Args {
 	parsedFlags := Args{}
-	parsedFlags.todoFile = "TODO.md"
 	pflag.BoolVarP(&parsedFlags.yes, "yes", "y", false, "bypass confirm")
 	pflag.BoolVarP(&parsedFlags.edit, "edit", "e", false, "edit in editor")
+	pflag.StringVarP(&parsedFlags.todoFile, "file", "f", "TODO.md", "markdown file name for TODOs")
 	pflag.StringVarP(&parsedFlags.add, "add", "a", "", "Add to to-dos")
 	pflag.StringVarP(&parsedFlags.tmux_win, "twin", "w", "TODOs", "tmux window name")
 	pflag.IntVarP(&parsedFlags.tmux_win_num, "tnum", "n", 9, "tmux window number")
@@ -59,13 +62,60 @@ func get_working_dir() string {
 	return gitRoot
 }
 
-func prepareTodo(todoPath string) {
-	if _, err := os.Stat(todoPath); os.IsNotExist(err) {
-		err := os.WriteFile(todoPath, []byte("# TODOs\n\n- [ ] Add your first task here.\n"), 0644)
-		if err != nil {
-			log.Fatalln("Error creating TODO.md:", err)
+func confirm(prompt string) bool {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print(prompt + " [y/N]: ")
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(strings.ToLower(input))
+	return input == "y" || input == "yes"
+}
+
+func project_name(w_dir string) string {
+	// need to get working dir, do i need this?
+	folders := strings.Split(w_dir, "/")
+	return folders[len(folders)-1]
+}
+
+func tmuxSupportsPopup() bool {
+	cmd := exec.Command("tmux", "display-popup", "-E", "true")
+	err := cmd.Run()
+	if err == nil {
+		return true
+	}
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		stderr := string(exitErr.Stderr)
+		if strings.Contains(stderr, "unknown command") || strings.Contains(stderr, "unknown option") {
+			return false
 		}
-		// fmt.Println("Created TODO.md at:", todoPath)
+	}
+	return true
+}
+
+func relativePathWithTilde(target string) string {
+	home, _ := os.UserHomeDir()
+	if after, ok := strings.CutPrefix(target, home); ok {
+		return "~" + after
+	}
+	cwd, _ := os.Getwd()
+	rel, err := filepath.Rel(cwd, target)
+	if err != nil {
+		return target
+	}
+	return rel
+}
+
+func prepareTodo(args *Args) {
+	if _, err := os.Stat(args.todo_path); os.IsNotExist(err) {
+		if args.yes || confirm(fmt.Sprintf("File %s does not exist in %s/ Create it?", args.todoFile, relativePathWithTilde(args.w_dir))) {
+			err := os.WriteFile(args.todo_path, []byte("# TODOs\n\n- [ ] Add your first task here.\n"), 0644)
+			if err != nil {
+				log.Fatalln("Error creating TODO.md:", err)
+			}
+			// fmt.Println("Created TODO.md at:", todoPath)
+		} else {
+			fmt.Println("Aborted!")
+			os.Exit(0)
+		}
 	}
 }
 
@@ -125,7 +175,11 @@ func openInTmux(editor, file string, windowName string, windowNumber int) {
 
 		// If a window already exists with the same name or preferred number, just switch to it
 		if name == windowName {
-			exec.Command("tmux", "select-window", "-t", num).Run()
+			c := exec.Command("tmux", "select-window", "-t", num)
+			c.Stdin = os.Stdin
+			c.Stdout = os.Stdout
+			c.Stderr = os.Stderr
+			c.Run()
 			return
 		}
 	}
@@ -153,12 +207,12 @@ func openInTmux(editor, file string, windowName string, windowNumber int) {
 	cmd.Run()
 }
 
-func editTodos(todoPath string, args *Args) error {
+func editTodos(args *Args) error {
 	editor := getEditor()
 	if insideTmux() {
-		openInTmux(editor, todoPath, args.tmux_win, args.tmux_win_num)
+		openInTmux(editor, args.todo_path, args.tmux_win, args.tmux_win_num)
 	} else {
-		cmd := exec.Command(editor, todoPath)
+		cmd := exec.Command(editor, args.todo_path)
 		// Attach command’s input/output to the terminal
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
@@ -171,11 +225,11 @@ func editTodos(todoPath string, args *Args) error {
 
 func main() {
 	args := parseFlags()
-	w_dir := get_working_dir()
-	todoPath := filepath.Join(w_dir, args.todoFile)
-	prepareTodo(todoPath)
+	args.w_dir = get_working_dir()
+	args.todo_path = filepath.Join(args.w_dir, args.todoFile)
+	prepareTodo(&args)
 	if args.edit {
-		editTodos(todoPath, &args)
+		editTodos(&args)
 		return
 	}
 }

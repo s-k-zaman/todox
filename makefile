@@ -1,4 +1,4 @@
-APP_NAME := todos
+APP_NAME := todox
 BUILD_DIR := ./bin
 # change to /usr/local/bin for system-wide
 INSTALL_DIR := $(HOME)/.local/bin
@@ -19,3 +19,7 @@ install: build
 
 clean:
 	rm -rf $(BUILD_DIR)
+
+remove:
+	rm -rf $(INSTALL_DIR)/$(APP_NAME)
+	@echo "Removed $(APP_NAME) from $(INSTALL_DIR)"
