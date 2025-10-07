@@ -7,16 +7,19 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	pflag "github.com/spf13/pflag"
 )
 
 type Args struct {
-	add      string
-	yes      bool
-	todoFile string
-	edit     bool
+	add          string
+	yes          bool
+	todoFile     string
+	edit         bool
+	tmux_win     string
+	tmux_win_num int
 }
 
 func parseFlags() Args {
@@ -25,6 +28,8 @@ func parseFlags() Args {
 	pflag.BoolVarP(&parsedFlags.yes, "yes", "y", false, "bypass confirm")
 	pflag.BoolVarP(&parsedFlags.edit, "edit", "e", false, "edit in editor")
 	pflag.StringVarP(&parsedFlags.add, "add", "a", "", "Add to to-dos")
+	pflag.StringVarP(&parsedFlags.tmux_win, "twin", "w", "TODOs", "tmux window name")
+	pflag.IntVarP(&parsedFlags.tmux_win_num, "tnum", "n", 9, "tmux window number")
 	pflag.Parse()
 
 	if parsedFlags.add == "" {
@@ -97,9 +102,8 @@ func containsLine(output, target string) bool {
 	return slices.Contains(splitLines(output), target)
 }
 
-func openInTmux(editor, file string) {
-	windowName := "TODOs"
-	preferredNumber := "9"
+func openInTmux(editor, file string, windowName string, windowNumber int) {
+	preferredNumber := strconv.Itoa(windowNumber)
 
 	// CHECK IF WINDOW EXISTS
 	checkCmd := exec.Command("tmux", "list-windows", "-F", "#{window_index}:#{window_name}")
@@ -149,10 +153,10 @@ func openInTmux(editor, file string) {
 	cmd.Run()
 }
 
-func editTodos(todoPath string) error {
+func editTodos(todoPath string, args *Args) error {
 	editor := getEditor()
 	if insideTmux() {
-		openInTmux(editor, todoPath)
+		openInTmux(editor, todoPath, args.tmux_win, args.tmux_win_num)
 	} else {
 		cmd := exec.Command(editor, todoPath)
 		// Attach command’s input/output to the terminal
@@ -171,7 +175,7 @@ func main() {
 	todoPath := filepath.Join(w_dir, args.todoFile)
 	prepareTodo(todoPath)
 	if args.edit {
-		editTodos(todoPath)
+		editTodos(todoPath, &args)
 		return
 	}
 }
