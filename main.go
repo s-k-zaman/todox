@@ -228,6 +228,20 @@ func main() {
 	args.w_dir = get_working_dir()
 	args.todo_path = filepath.Join(args.w_dir, args.todoFile)
 	prepareTodo(&args)
+	if args.add != "" {
+		content, err := os.ReadFile(args.todo_path)
+		if err != nil {
+			log.Fatalln("Error reading TODO.md:", err)
+		}
+		newTask := "\n- [ ] " + args.add
+		newContent := string(content) + newTask
+		err = os.WriteFile(args.todo_path, []byte(newContent), 0644)
+		if err != nil {
+			log.Fatalln("Error writing TODO.md:", err)
+		}
+		fmt.Println("Added task:", args.add)
+		return
+	}
 	if args.edit {
 		editTodos(&args)
 		return

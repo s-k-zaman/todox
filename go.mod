@@ -1,4 +1,4 @@
-module todos
+module github.com/s-k-zaman/todox
 
 go 1.25.1
 
