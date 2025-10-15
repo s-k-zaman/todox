@@ -6,7 +6,7 @@ A simple CLI tool for managing TODO lists in Markdown format, with tmux integrat
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/s-k-zaman/todox.git
    cd todox
    ```
 
